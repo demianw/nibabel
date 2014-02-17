@@ -206,7 +206,21 @@ class MGHHeader(object):
         ''' Return copy of header
         '''
         return self.__class__(self.binaryblock, check=False)
-        pass
+
+    def __eq__(self, other):
+        ''' equality between two MGH format headers
+
+        Examples
+        --------
+        >>> wstr = MGHHeader()
+        >>> wstr2 = MGHHeader()
+        >>> wstr == wstr2
+        True
+        '''
+        return self.binaryblock == other.binaryblock
+
+    def __ne__(self, other):
+        return not self == other
 
     def check_fix(self):
         ''' Pass. maybe for now'''
@@ -298,7 +312,6 @@ class MGHHeader(object):
         delta = hdr['delta']
         delta[:] = zooms[:]
 
-
     def get_data_shape(self):
         ''' Get shape of data
         '''
@@ -366,6 +379,11 @@ class MGHHeader(object):
         shape = self.get_data_shape()
         offset = self.get_data_offset()
         return array_from_file(shape, dtype, fileobj, offset)
+
+    def get_slope_inter(self):
+        """ MGH format does not do scaling?
+        """
+        return None, None
 
     def _empty_headerdata(self):
         ''' Return header data for empty header
@@ -446,10 +464,6 @@ class MGHImage(SpatialImage):
 
     ImageArrayProxy = ArrayProxy
 
-    def get_header(self):
-        ''' Return the MGH header given the MGHImage'''
-        return self._header
-
     @classmethod
     def filespec_to_file_map(klass, filespec):
         """ Check for compressed .mgz format, then .mgh format """
@@ -493,22 +507,11 @@ class MGHImage(SpatialImage):
         self.update_header()
         hdr = self.get_header()
         with file_map['image'].get_prepare_fileobj('wb') as mghf:
-            self._write_header(mghf, hdr)
+            hdr.writehdr_to(mghf)
             self._write_data(mghf, data, hdr)
             self._write_footer(mghf, hdr)
         self._header = hdr
         self.file_map = file_map
-
-    def _write_header(self, mghfile, header):
-        ''' Utility routine to write header
-
-        Parameters
-        ----------
-        mghfile  : file-like
-           file-like object implementing ``write``, open for writing
-        header : header object
-        '''
-        header.writehdr_to(mghfile)
 
     def _write_data(self, mghfile, data, header):
         ''' Utility routine to write image
@@ -543,29 +546,16 @@ class MGHImage(SpatialImage):
         '''
         header.writeftr_to(mghfile)
 
-    def get_affine(self):
-        ''' Return the affine transform'''
-        return self._header.get_vox2ras()
-
-    def update_header(self):
-        ''' Harmonize header with image data and affine
-        '''
+    def _affine2header(self):
+        """ Unconditionally set affine into the header """
         hdr = self._header
-        if not self._data is None:
-            hdr.set_data_shape(self._data.shape)
-        # If the affine is not None, and it is different from the main affine in
-        # the header, update the heaader
-        if self._affine is None:
-            return
-        if np.allclose(self._affine, hdr.get_best_affine()):
-            return
+        shape = self._dataobj.shape
         # for more information, go through save_mgh.m in FreeSurfer dist
         MdcD = self._affine[:3, :3]
         delta = np.sqrt(np.sum(MdcD * MdcD, axis=0))
         Mdc = MdcD / np.tile(delta, (3, 1))
         Pcrs_c = np.array([0, 0, 0, 1], dtype=np.float)
-        Pcrs_c[:3] = np.array([self._data.shape[0], self._data.shape[1],
-                                self._data.shape[2]], dtype=np.float) / 2.0
+        Pcrs_c[:3] = np.array(shape[:3]) / 2.0
         Pxyz_c = np.dot(self._affine, Pcrs_c)
 
         hdr['delta'][:] = delta

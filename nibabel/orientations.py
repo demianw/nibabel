@@ -8,6 +8,8 @@
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ##
 ''' Utilities for calculating and applying affine orientations '''
 
+from __future__ import division, print_function, absolute_import
+
 import numpy as np
 import numpy.linalg as npl
 
@@ -88,17 +90,18 @@ def io_orientation(affine, tol=None):
             R[out_ax, :] = 0
     return ornt
 
+
 def ornt_transform(start_ornt, end_ornt):
     '''Return the orientation that transforms from `start_ornt` to `end_ornt`.
-    
+
     Parameters
     ----------
     start_ornt : (n,2) orientation array
         Initial orientation.
-        
+
     end_ornt : (n,2) orientation array
         Final orientation.
-       
+
     Returns
     -------
     orientations : (p, 2) ndarray
@@ -125,6 +128,7 @@ def ornt_transform(start_ornt, end_ornt):
             raise ValueError("Unable to find out axis %d in start_ornt" % 
                              end_out_idx)
     return result
+
 
 def apply_orientation(arr, ornt):
     ''' Apply transformations implied by `ornt` to the first
@@ -293,7 +297,7 @@ def ornt2axcodes(ornt, labels=None):
     ('F', 'L', 'U')
     """
     if labels is None:
-        labels = zip('LPI', 'RAS')
+        labels = list(zip('LPI', 'RAS'))
     axcodes = []
     for axno, direction in np.asarray(ornt):
         if np.isnan(axno):
@@ -339,7 +343,7 @@ def axcodes2ornt(axcodes, labels=None):
            [ 2.,  1.]])
     """
     if labels is None:
-        labels = zip('LPI', 'RAS')
+        labels = list(zip('LPI', 'RAS'))
     n_axes = len(axcodes)
     ornt = np.ones((n_axes, 2), dtype=np.int8) * np.nan
     for code_idx, code in enumerate(axcodes):

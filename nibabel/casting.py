@@ -4,6 +4,7 @@ Most routines work round some numpy oddities in floating point precision and
 casting.  Others work round numpy casting to and from python ints
 """
 
+from numbers import Integral
 from platform import processor, machine
 
 import numpy as np
@@ -428,6 +429,11 @@ def int_to_float(val, flt_type):
     """
     if not flt_type is np.longdouble:
         return flt_type(val)
+    # The following works around a nasty numpy 1.4.1 bug such that:
+    # >>> int(np.uint32(2**32-1)
+    # -1
+    if not isinstance(val, Integral):
+        val = int(str(val))
     faval = np.longdouble(0)
     while val != 0:
         f64 = np.float64(val)
@@ -629,6 +635,8 @@ def best_float():
     case we return float64 on the basis it's the fastest and smallest at the
     highest precision.
 
+    SPARC float128 also proved so slow that we prefer float64.
+
     Returns
     -------
     best_type : numpy type
@@ -649,6 +657,26 @@ def best_float():
     return np.float64
 
 
+def longdouble_lte_float64():
+    """ Return True if longdouble appears to have the same precision as float64
+    """
+    return np.longdouble(2**53) == np.longdouble(2**53) + 1
+
+
+# Record longdouble precision at import because it can change on Windows
+_LD_LTE_FLOAT64 = longdouble_lte_float64()
+
+
+def longdouble_precision_improved():
+    """ True if longdouble precision increased since initial import
+
+    This can happen on Windows compiled with MSVC.  It may be because libraries
+    compiled with mingw (longdouble is Intel80) get linked to numpy compiled
+    with MSVC (longdouble is Float64)
+    """
+    return not longdouble_lte_float64() and _LD_LTE_FLOAT64
+
+
 def have_binary128():
     """ True if we have a binary128 IEEE longdouble
     """
@@ -664,13 +692,15 @@ def ok_floats():
 
     Remove longdouble if it has no higher precision than float64
     """
-    floats = np.sctypes['float']
+    # copy float list so we don't change the numpy global
+    floats = np.sctypes['float'][:]
     if best_float() != np.longdouble and np.longdouble in floats:
         floats.remove(np.longdouble)
     return sorted(floats, key=lambda f : type_info(f)['nmant'])
 
 
 OK_FLOATS = ok_floats()
+
 
 
 def able_int_type(values):

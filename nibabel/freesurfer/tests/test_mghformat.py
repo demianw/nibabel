@@ -7,21 +7,26 @@
 #
 ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ### ##
 '''Tests for mghformat reading writing'''
-from __future__ import with_statement
 
 import os
-from io import StringIO, BytesIO
 
 import numpy as np
+
+from ...externals.six import BytesIO
 from .. import load, save, MGHImage
-from ..mghformat import MGHError
+from ..mghformat import MGHHeader, MGHError
 from ...tmpdirs import InTemporaryDirectory
-from ...py3k import unicode
 from ...fileholders import FileHolder
 
+from nose.tools import assert_true, assert_false
+
+from numpy.testing import (assert_equal, assert_array_equal,
+                           assert_array_almost_equal, assert_almost_equal,
+                           assert_raises)
+
 from ...testing import data_path
-from numpy.testing import assert_equal, assert_array_equal, \
-    assert_array_almost_equal, assert_almost_equal, assert_raises
+
+from ...tests import test_spatialimages as tsi
 
 # sample voxel to ras matrix (mri_info --vox2ras)
 v2r = np.array([[1, 2, 3, -13], [2, 3, 1, -11.5],
@@ -126,10 +131,6 @@ def bad_dtype_mgh():
     # form a MGHImage object using data
     # and the default affine matrix (Note the "None")
     img = MGHImage(v, None)
-    with TemporaryDirectory() as tmpdir:
-        save(img, os.path.join(tmpdir, 'tmpsave.mgz'))
-        # read from the tmp file and see if it checks out
-        mgz = load(os.path.join(tmpdir, 'tmpsave.mgz'))
 
 
 def test_bad_dtype_mgh():
@@ -168,11 +169,11 @@ def test_header_updating():
     mgz = load(mgz_path)
     hdr = mgz.get_header()
     # Test against mri_info output
-    exp_aff = np.loadtxt(StringIO(unicode("""
+    exp_aff = np.loadtxt(BytesIO(b"""
     1.0000   2.0000   3.0000   -13.0000
     2.0000   3.0000   1.0000   -11.5000
     3.0000   1.0000   2.0000   -11.5000
-    0.0000   0.0000   0.0000     1.0000""")))
+    0.0000   0.0000   0.0000     1.0000"""))
     assert_almost_equal(mgz.get_affine(), exp_aff, 6)
     assert_almost_equal(hdr.get_affine(), exp_aff, 6)
     # Test that initial wonky header elements have not changed
@@ -210,3 +211,33 @@ def test_cosine_order():
     zooms = np.sqrt(np.sum(RZS ** 2, axis=0))
     assert_almost_equal(hdr2['Mdc'], (RZS / zooms).T)
     assert_almost_equal(hdr2['delta'], zooms)
+
+
+def test_eq():
+    # Test headers compare properly
+    hdr = MGHHeader()
+    hdr2 = MGHHeader()
+    assert_equal(hdr, hdr2)
+    hdr.set_data_shape((2, 3, 4))
+    assert_false(hdr == hdr2)
+    hdr2.set_data_shape((2, 3, 4))
+    assert_equal(hdr, hdr2)
+
+
+def test_header_slope_inter():
+    # Test placeholder slope / inter method
+    hdr = MGHHeader()
+    assert_equal(hdr.get_slope_inter(), (None, None))
+
+
+class TestMGHImage(tsi.TestSpatialImage):
+    """ Apply general image tests to MGHImage
+    """
+    image_class = MGHImage
+    can_save = True
+
+    def check_dtypes(self, expected, actual):
+        # Some images will want dtypes to be equal including endianness,
+        # others may only require the same type
+        # MGH requires the actual to be a big endian version of expected
+        assert_equal(expected.newbyteorder('>'), actual)
